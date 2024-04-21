@@ -1,21 +1,36 @@
 from django.db import models
+import datetime
 
 class Promotion(models.Model):
     description = models.CharField(max_length=255)
     discount = models.FloatField()
 
+    
+
+    
+    def __str__(self) -> str:
+        return self.description
+
 
 class Collection(models.Model):
     title = models.CharField(max_length=255)
 
+    def __str__(self) -> str:
+        return self.title
 
 class Product(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField()
+    slug = models.SlugField(max_length=255, unique=True, default='')
     price = models.DecimalField(max_digits=6, decimal_places=2)
     inventory = models.IntegerField()
+    collection = models.ForeignKey(Collection, on_delete=models.CASCADE, related_name='products')
     last_update = models.DateTimeField(auto_now=True)
     promotions = models.ManyToManyField(Promotion)
+
+
+    def __str__(self) -> str:
+        return self.title
 
 
 class Customer(models.Model):
@@ -36,6 +51,9 @@ class Customer(models.Model):
     membership = models.CharField(
         max_length=1, choices=MEMBERSHIP_CHOICES, default=MEMBERSHIP_BRONZE)
 
+
+    def __str__(self) -> str:
+        return self.first_name
 
 class Order(models.Model):
     PAYMENT_STATUS_PENDING = 'P'
