@@ -1,13 +1,12 @@
+from django.core.validators import MinValueValidator
 from django.db import models
-import datetime
+from uuid import uuid4
+
 
 class Promotion(models.Model):
     description = models.CharField(max_length=255)
     discount = models.FloatField()
 
-    
-
-    
     def __str__(self) -> str:
         return self.description
 
@@ -18,16 +17,17 @@ class Collection(models.Model):
     def __str__(self) -> str:
         return self.title
 
+
 class Product(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField()
     slug = models.SlugField(max_length=255, unique=True, default='')
     price = models.DecimalField(max_digits=6, decimal_places=2)
     inventory = models.IntegerField()
-    collection = models.ForeignKey(Collection, on_delete=models.CASCADE, related_name='products')
+    collection = models.ForeignKey(
+        Collection, on_delete=models.CASCADE, related_name='products')
     last_update = models.DateTimeField(auto_now=True)
     promotions = models.ManyToManyField(Promotion)
-
 
     def __str__(self) -> str:
         return self.title
@@ -51,9 +51,9 @@ class Customer(models.Model):
     membership = models.CharField(
         max_length=1, choices=MEMBERSHIP_CHOICES, default=MEMBERSHIP_BRONZE)
 
-
     def __str__(self) -> str:
         return self.first_name
+
 
 class Order(models.Model):
     PAYMENT_STATUS_PENDING = 'P'
@@ -73,7 +73,8 @@ class Order(models.Model):
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.PROTECT)
-    product = models.ForeignKey(Product, on_delete=models.PROTECT,related_name='orderitems')
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT, related_name='orderitems')
     quantity = models.PositiveSmallIntegerField()
     unit_price = models.DecimalField(max_digits=6, decimal_places=2)
 
@@ -86,22 +87,29 @@ class Address(models.Model):
 
 
 class Cart(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
 class CartItem(models.Model):
-    cart = models.ForeignKey(Cart, on_delete=models.CASCADE)
+    cart = models.ForeignKey(
+        Cart, on_delete=models.CASCADE, related_name='items')  # carditem_set
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    quantity = models.PositiveSmallIntegerField()
+    quantity = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
+
+    class Meta:
+        unique_together = [['cart', 'product']]
+
+    def __str__(self):
+        return self.product.title[0:100]
 
 
 class Review(models.Model):
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reviews')
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, related_name='reviews')
     name = models.CharField(max_length=255)
     description = models.TextField()
     date = models.DateField(auto_now_add=True)
-    
+
     def __str__(self) -> str:
         return self.name
-    
-    

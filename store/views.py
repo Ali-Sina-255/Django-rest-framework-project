@@ -7,19 +7,24 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework import status
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.mixins import CreateModelMixin, RetrieveModelMixin, DestroyModelMixin
+from rest_framework.viewsets import ModelViewSet, GenericViewSet
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
-
 # serializer
-from . filters import ProductFilter
-from .api.serializers import ProductSerializer, CollectionSerializers, ReviewSerializers
-from .models import OrderItem, Product, Collection, Review
+from .filters import ProductFilter
+from .api.serializers import (ProductSerializer, CollectionSerializers, ReviewSerializers,
+                              CartSerializers,
+                              CartItemSerializers,
+                              AddCartItemSerializer,
+                              UpdateCartItemSerializer
+                              )
+from .models import OrderItem, Product, Collection, Review, Cart, CartItem
 # pagination
 from rest_framework.pagination import PageNumberPagination
 from .pagination import DefaultPagination
+
+
 # ============================= ViewSets ========================
-
-
 class ProductViewSet(ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
@@ -56,7 +61,6 @@ class ProductListApiView(ListCreateAPIView):
     # get_serializer_class = ProductSerializer
 
     def get_queryset(self):
-
         return Product.objects.select_related('collection').all()
 
     def get_serializer_class(self):
@@ -69,6 +73,7 @@ class ProductListApiView(ListCreateAPIView):
 class ProductDetailsApiView(RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
+
     # lookup_field = 'id'
     # when we use RetrieveUpdateDestroyAPIView inside this function is implemented get, put patch and delete just we overwrite the delete function
     # def get(self, request, id):
@@ -151,9 +156,9 @@ class CollectionViewSet(ModelViewSet):
 
 
 class ReviewViewSet(ModelViewSet):
-
     serializer_class = ReviewSerializers
     queryset = Review.objects.all()
+
     # def get_queryset(self):
     #     return Review.objects.filter(product_id= self.kwargs['product_pk'])
 
@@ -161,82 +166,27 @@ class ReviewViewSet(ModelViewSet):
         return {"product_id": self.kwargs['product_pk']}
 
 
-# =============================function base views ========================
-@api_view(["GET", "POST"])
-def product_list_api_views(request):
-    if request.method == 'GET':
-        product = Product.objects.all()
-        print(product)
-        serializer = ProductSerializer(product, many=True)
-        return Response(serializer.data)
-
-    elif request.method == 'POST':
-        serializer = ProductSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+class CartViewSet(CreateModelMixin,
+                  RetrieveModelMixin,
+                  DestroyModelMixin,
+                  GenericViewSet):
+    queryset = Cart.objects.prefetch_related('items__product').all()
+    serializer_class = CartSerializers
 
 
-@api_view(['GET', 'PUT', "DELETE"])
-def product_details_api_view(request, id):
-    try:
-        product = Product.objects.get(pk=id)
-    except Product.DoesNotExist:
-        return Response(
-            {"error": {
-                "code": 404,
-                "message": f"there is no such table with the {id}."
-            }},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    if request.method == 'GET':
-        serializer = ProductSerializer(product)
-        return Response(serializer.data)
+class CartItemViewSet(ModelViewSet):
+    http_method_names = ['get', 'post', 'patch', 'delete']
 
-    elif request.method == 'PUT':
-        serializer = ProductSerializer(instance=product, data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return AddCartItemSerializer
+        elif self.request.method == 'PATCH':
+            return UpdateCartItemSerializer
+        else:
+            return CartItemSerializers
 
-    elif request.method == "DELETE":
-        product.delete()
-        return Response({
-            "process": {
-                "code": 204,
-                "message": f"Product whose id was {id} has been deleted"
-            }}, status=status.HTTP_204_NO_CONTENT
-        )
+    def get_serializer_context(self):
+        return {"cart_id": self.kwargs['cart_pk']}
 
-
-@api_view(['GET', 'POST'])
-def collection_list_api_view(request):
-    if request.method == "GET":
-        queryset = Collection.objects.annotate(
-            product_count=Count('products')).all()
-        serializer = CollectionSerializers(queryset, many=True)
-        return Response(serializer.data)
-    elif request.method == "POST":
-        serializer = CollectionSerializers(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-@api_view(['GET', 'POST', 'DELETE'])
-def collection_detail_api_views(request, id):
-    collection = get_object_or_404(Collection.objects.annotate(
-        product_count=Count('products')), pk=id)
-    if request.method == 'GET':
-        serializer = CollectionSerializers(collection)
-        return Response(serializer.data)
-    elif request.method == 'POST':
-        serializer = CollectionSerializers(collection, data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-    elif request.method == 'DELETE':
-        if collection.products.count() > 0:
-            return Response({"error": "Collection cannot be deleted because it includes one or more  products."})
-        collection.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+    def get_queryset(self):
+        return CartItem.objects.filter(cart_id=self.kwargs['cart_pk']).select_related('product')
