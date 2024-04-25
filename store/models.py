@@ -49,10 +49,16 @@ class Customer(models.Model):
     membership = models.CharField(
         max_length=1, choices=MEMBERSHIP_CHOICES, default=MEMBERSHIP_BRONZE)
 
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 
     def __str__(self) -> str:
         return f"{self.user.first_name} {self.user.last_name}"
+
+    class Meta:
+        permissions = [
+            ('view_history', 'Can view the history')
+        ]
 
 
 class Order(models.Model):
@@ -100,7 +106,8 @@ class CartItem(models.Model):
     cart = models.ForeignKey(
         Cart, on_delete=models.CASCADE, related_name='items')  # carditem_set
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    quantity = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
+    quantity = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1)])
 
     class Meta:
         unique_together = [['cart', 'product']]

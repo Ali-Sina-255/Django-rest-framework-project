@@ -2,14 +2,15 @@ from django.shortcuts import render, get_object_or_404
 from django.db.models import Count
 # searching, filtering, ordering
 from django_filters.rest_framework import DjangoFilterBackend
-
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework import status
 from rest_framework.mixins import CreateModelMixin, RetrieveModelMixin, DestroyModelMixin, UpdateModelMixin
 from rest_framework.viewsets import ModelViewSet, GenericViewSet
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser, DjangoModelPermissions
+
 # serializer
 from .filters import ProductFilter
 from .api.serializers import (ProductSerializer,
@@ -25,13 +26,13 @@ from .models import OrderItem, Product, Collection, Review, Cart, CartItem, Cust
 # pagination
 from rest_framework.pagination import PageNumberPagination
 from .pagination import DefaultPagination
+from .permissions import FullDjangoModelPermission, IsAdminOrReadyOnly, ViewCustomerHistoryPermissions
 
 
 # ============================= ViewSets ========================
 class ProductViewSet(ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
-
     # ============================= Filter with   DjangoFilterBackend  ========================
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     # filterset_fields = ['collection_id']
@@ -40,6 +41,7 @@ class ProductViewSet(ModelViewSet):
     pagination_class = DefaultPagination
     search_fields = ['title', 'description', 'collection__title']
     ordering_fields = ['price', 'last_update']
+    permission_classes = [IsAdminOrReadyOnly]
 
     # ============================= filter with our logic ========================
     # def get_queryset(self):
@@ -103,6 +105,7 @@ class CollectionListApiView(ListCreateAPIView):
     queryset = Collection.objects.annotate(
         product_count=Count('products')).all()
     serializer_class = CollectionSerializers
+    permission_classes = [IsAdminOrReadyOnly]
     # an other way
     # def get_queryset(self):
     #     return  Collection.objects.annotate(product_count=Count('products')).all()
@@ -148,6 +151,7 @@ class CollectionViewSet(ModelViewSet):
     queryset = collection = Collection.objects.annotate(
         product_count=Count('products'))
     serializer_class = CollectionSerializers
+    permission_classes = [IsAdminOrReadyOnly]
 
     def delete(self, request, pk):
         collection = get_object_or_404(Collection.objects.annotate(
@@ -195,6 +199,24 @@ class CartItemViewSet(ModelViewSet):
         return CartItem.objects.filter(cart_id=self.kwargs['cart_pk']).select_related('product')
 
 
-class CustomerViewSet(CreateModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet):
+class CustomerViewSet(ModelViewSet):
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
+    permission_classes = [IsAdminUser]
+
+    @action(detail=True, permission_classes=[ViewCustomerHistoryPermissions])
+    def history(self, request, pkd):
+        return Response('OK')
+
+    @action(detail=False, methods=['GET', 'PUT'], permission_classes=[IsAuthenticated])
+    def me(self, request):
+        (customer, created) = Customer.objects.get_or_create(
+            user_id=request.user.id)
+        if request.method == 'GET':
+            serializer = CustomerSerializer(customer)
+            return Response(serializer.data)
+        elif request.method == 'PUT':
+            serializer = CustomerSerializer(customer, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
